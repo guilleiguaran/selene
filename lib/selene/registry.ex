@@ -6,8 +6,8 @@ defmodule Selene.Registry do
   @doc """
   Start the registry.
   """
-  def start_link(event_manager, opts \\ []) do
-    GenServer.start_link(__MODULE__, event_manager, opts)
+  def start_link(event_manager, buckets, opts \\ []) do
+    GenServer.start_link(__MODULE__, {event_manager, buckets}, opts)
   end
 
   @doc """
@@ -36,10 +36,10 @@ defmodule Selene.Registry do
 
   ## Server Callbacks
 
-  def init(events) do
+  def init({events, buckets}) do
     names = HashDict.new
     refs = HashDict.new
-    {:ok, %{names: names, refs: refs, events: events}}
+    {:ok, %{names: names, refs: refs, events: events, buckets: buckets}}
   end
 
   def handle_call({:lookup, name}, _from, state) do
@@ -54,7 +54,7 @@ defmodule Selene.Registry do
     case HashDict.has_key?(state.names, name) do
       true ->   {:noreply, state}
 
-      false ->  {:ok, pid} = Selene.Bucket.start_link
+      false ->  {:ok, pid} = Selene.Bucket.Supervisor.start_bucket(state.buckets)
                 ref = Process.monitor(pid)
                 refs = HashDict.put(state.refs, ref, name)
                 names = HashDict.put(state.names, name, pid)
