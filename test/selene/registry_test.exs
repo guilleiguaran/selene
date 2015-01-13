@@ -1,8 +1,20 @@
 defmodule Selene.RegistryTest do
   use ExUnit.Case, async: true
 
+  defmodule Forwarder do
+    use GenEvent
+
+    def handle_event(event, parent) do
+      send parent, event
+      {:ok, parent}
+    end
+  end
+
   setup do
-    {:ok, registry} = Selene.Registry.start_link
+    {:ok, manager} = GenEvent.start_link
+    {:ok, registry} = Selene.Registry.start_link(manager)
+
+    GenEvent.add_mon_handler(manager, Forwarder, self())
     {:ok, registry: registry}
   end
 
@@ -22,5 +34,14 @@ defmodule Selene.RegistryTest do
     Agent.stop(bucket)
 
     assert Selene.Registry.lookup(registry, "bucket") == :error
+  end
+
+  test "send events on create and crash", %{registry: registry} do
+    Selene.Registry.create(registry, "bucket")
+    {:ok, bucket} = Selene.Registry.lookup(registry, "bucket")
+    assert_receive {:create, "bucket", ^bucket}
+
+    Agent.stop(bucket)
+    assert_receive {:exit, "bucket", ^bucket}
   end
 end
