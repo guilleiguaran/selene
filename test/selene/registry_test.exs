@@ -11,8 +11,9 @@ defmodule Selene.RegistryTest do
   end
 
   setup do
+    {:ok, sup} = Selene.Bucket.Supervisor.start_link
     {:ok, manager} = GenEvent.start_link
-    {:ok, registry} = Selene.Registry.start_link(manager)
+    {:ok, registry} = Selene.Registry.start_link(manager, sup)
 
     GenEvent.add_mon_handler(manager, Forwarder, self())
     {:ok, registry: registry}
@@ -33,6 +34,15 @@ defmodule Selene.RegistryTest do
     {:ok, bucket} = Selene.Registry.lookup(registry, "bucket")
     Agent.stop(bucket)
 
+    assert Selene.Registry.lookup(registry, "bucket") == :error
+  end
+
+  test "removes buckets on crash", %{registry: registry} do
+    Selene.Registry.create(registry, "bucket")
+    {:ok, bucket} = Selene.Registry.lookup(registry, "bucket")
+
+    Process.exit(bucket, :shutdown)
+    assert_receive {:exit, "bucket", ^bucket}
     assert Selene.Registry.lookup(registry, "bucket") == :error
   end
 
